@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Hospital Management System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+
+        .login-container {
+            width: 300px;
+            margin: 0 auto;
+            margin-top: 100px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-container h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"] {
+            width: 90%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 16px;
+        }
+
+        .form-group a {
+            display: block;
+            width: 90%;
+            padding: 10px;
+            border: none;
+            border-radius: 3px;
+            background-color: #007bff;
+            color: #fff;
+            text-align: center;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .form-group a:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-container">
+        <h2>Hospital Management System</h2>
+        <form id="loginForm" action="/home" method="POST">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div class="form-group">
+                <a href="#" id="loginLink">Login</a>
+            </div>
+        </form>
+    </div>
+
+
+</body>
+<script>
+    document.getElementById('loginLink').addEventListener('click', function(event) {
+        event.preventDefault(); // Prevent default link behavior
+    
+        // Get the values of username and password fields
+        var username = document.getElementById('username').value;
+        var password = document.getElementById('password').value;
+    
+        // Check if username and password match the criteria
+        if (username === 'fabio' && password === '12345') {
+            // Create a hidden form and submit it
+            var form = document.createElement('form');
+            form.setAttribute('method', 'POST');
+            form.setAttribute('action', '/home');
+            document.body.appendChild(form);
+    
+            // Create hidden input fields for username and password
+            var usernameField = document.createElement('input');
+            usernameField.setAttribute('type', 'hidden');
+            usernameField.setAttribute('name', 'username');
+            usernameField.setAttribute('value', username);
+            form.appendChild(usernameField);
+    
+            var passwordField = document.createElement('input');
+            passwordField.setAttribute('type', 'hidden');
+            passwordField.setAttribute('name', 'password');
+            passwordField.setAttribute('value', password);
+            form.appendChild(passwordField);
+    
+            // Submit the form
+            form.submit();
+        } else {
+            // If not match, show error message
+            alert('Incorrect username or password');
+        }
+    });
+</script>
+
+</html>
