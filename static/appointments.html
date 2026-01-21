@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Appointment History</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f4f7fb;
+}
+
+nav {
+  background: #0d6efd;
+  padding: 18px 40px;
+  color: white;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.container {
+  max-width: 1000px;
+  margin: 40px auto;
+  padding: 20px;
+}
+
+.card {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+}
+
+h2 {
+  margin-top: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+}
+
+th {
+  background: #eef3ff;
+}
+
+tr:hover {
+  background: #f8f9fa;
+}
+
+.back {
+  margin-top: 20px;
+  display: inline-block;
+  padding: 10px 18px;
+  background: #0d6efd;
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+}
+</style>
+</head>
+
+<body>
+
+<nav>Appointment History</nav>
+
+<div class="container">
+  <div class="card">
+    <h2>All Appointments</h2>
+
+    <table id="apptTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Patient</th>
+          <th>Doctor</th>
+          <th>Date & Time</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <a href="/home" class="back">← Back to Dashboard</a>
+  </div>
+</div>
+
+<script>
+fetch("/appointments")
+  .then(res => res.json())
+  .then(data => {
+    const body = document.querySelector("#apptTable tbody");
+    body.innerHTML = "";
+
+    if (data.length === 0) {
+      body.innerHTML = "<tr><td colspan='4'>No appointments found</td></tr>";
+      return;
+    }
+
+    data.forEach(a => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${a.id}</td>
+        <td>${a.patient}</td>
+        <td>${a.doctor}</td>
+        <td>${a.date}</td>
+      `;
+      body.appendChild(row);
+    });
+  });
+</script>
+
+</body>
+</html>

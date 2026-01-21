@@ -1,100 +1,198 @@
-from flask import Flask,send_from_directory,render_template
-from flask_restful import Resource, Api
-from package.patient import Patients, Patient
-from package.doctor import Doctors, Doctor
-from package.appointment import Appointments, Appointment
-from package.common import Common
-import json
-from flask import request, jsonify
+import os
+import sqlite3
+from flask import Flask, request, jsonify, session, redirect
+from dotenv import load_dotenv
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from flask import Flask, render_template, request
+from email.message import EmailMessage
 
-with open('HMS\config.json') as data_file:
-    config = json.load(data_file)
+load_dotenv()
 
-app = Flask(__name__, static_url_path='')
-api = Api(app)
+app = Flask(__name__, static_folder="static", static_url_path="")
+app.secret_key = "hospital-secret"
 
-api.add_resource(Patients, '/patient')
-api.add_resource(Patient, '/patient/<int:id>')
-api.add_resource(Doctors, '/doctor')
-api.add_resource(Doctor, '/doctor/<int:id>')
-api.add_resource(Appointments, '/appointment')
-api.add_resource(Appointment, '/appointment/<int:id>')
-api.add_resource(Common, '/common')
+DB = "hospital.db"
 
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASS = os.getenv("EMAIL_PASS")
 
-@app.route('/')
-def index():
-    return app.send_static_file('login.html')
+# -------------------- DB INIT --------------------
+def init_db():
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
 
-@app.route('/home', methods=['POST'])
+    cur.execute("""CREATE TABLE IF NOT EXISTS patients(
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        email TEXT
+    )""")
+
+    cur.execute("""CREATE TABLE IF NOT EXISTS doctors(
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        specialization TEXT
+    )""")
+
+    cur.execute("""CREATE TABLE IF NOT EXISTS appointments(
+        id INTEGER PRIMARY KEY,
+        patient TEXT,
+        doctor TEXT,
+        date TEXT,
+        time TEXT,
+        status TEXT
+    )""")
+
+    # Seed doctors
+    cur.execute("SELECT COUNT(*) FROM doctors")
+    if cur.fetchone()[0] == 0:
+        doctors = [
+            ("Dr. Rajesh Kumar", "Cardiologist"),
+            ("Dr. Anita Rao", "Gynecologist"),
+            ("Dr. Sunil Mehta", "Orthopedic"),
+            ("Dr. Neha Sharma", "Dermatologist"),
+            ("Dr. Arjun Pillai", "Neurologist"),
+        ]
+        cur.executemany("INSERT INTO doctors VALUES (NULL,?,?)", doctors)
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# -------------------- EMAIL --------------------
+def send_email(to, subject, body):
+    msg = EmailMessage()
+    msg["From"] = EMAIL_USER
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(EMAIL_USER, EMAIL_PASS)
+        server.send_message(msg)
+
+# -------------------- AUTH --------------------
+@app.route("/")
+def login_page():
+    return app.send_static_file("login.html")
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    if data["email"] == ADMIN_EMAIL and data["password"] == ADMIN_PASSWORD:
+        session["logged"] = True
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 401
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+@app.route("/home")
 def home():
-    return app.send_static_file('index.html')
+    if not session.get("logged"):
+        return redirect("/")
+    return app.send_static_file("index.html")
 
-patients = {}
+# -------------------- API GUARD --------------------
+def guard():
+    if not session.get("logged"):
+        return False
+    return True
 
-@app.route('/create_patient', methods=['POST'])
+# -------------------- PATIENT --------------------
+@app.route("/create_patient", methods=["POST"])
 def create_patient():
-    if request.method == 'POST':
-        data = request.json
-        # Assuming data contains patient name and email
-        patient_name = data.get('name')
-        patient_email = data.get('email')
+    if not guard(): return jsonify({"error":"unauthorized"}),401
 
-        # Storing patient name and email in a dictionary
-        patient_id = len(patients) + 1
-        patients[patient_id] = {'name': patient_name, 'email': patient_email}
+    d = request.json
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+    cur.execute("INSERT INTO patients VALUES (NULL,?,?)",(d["name"],d["email"]))
+    conn.commit()
+    conn.close()
+    return jsonify({"message":"Patient registered"})
 
-        # return a response if needed
-        print(patients)
-        return jsonify({'message': 'Patient created successfully', 'patient_id': patient_id})
+# -------------------- DOCTORS --------------------
+@app.route("/doctor")
+def doctors():
+    if not guard(): return jsonify([]),401
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+    cur.execute("SELECT name,specialization FROM doctors")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([{"name":r[0],"specialization":r[1]} for r in rows])
 
-
-@app.route('/create_appointment', methods=['POST'])
+# -------------------- APPOINTMENT --------------------
+@app.route("/create_appointment", methods=["POST"])
 def create_appointment():
-    if request.method == 'POST':
-        # Assuming you receive appointment data in JSON format
-        data = request.json
+    if not guard(): return jsonify({"error":"unauthorized"}),401
 
-        # Extract appointment details from the JSON data
-        doctor = data.get('doctor')
-        patient = data.get('patient')
-        appointment_date = data.get('appointmentDate')
-# Retrieve patient's email from the dictionary using patient's name
-        patient_name = patient.split()[0]
-        print(patient_name)
-        # Initialize patient_email as None
-        patient_email = None
-        print(patients)
-        # Iterate through patients dictionary to find matching patient name
-        for patient_id, patient_info in patients.items():
-            print(patient_id)
-            if patient_info['name'] == patient_name:
-                patient_email = patient_info['email']
-                break
+    d = request.json
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
 
-        # If patient_email is still None, patient not found in the dictionary
-        if patient_email is None:
-            return jsonify({'error': 'Patient not found in the system'}), 404
+    cur.execute(
+        "INSERT INTO appointments VALUES (NULL,?,?,?,?,?)",
+        (d["patient"],d["doctor"],d["date"],d["time"],"Booked")
+    )
 
-        # After creating the appointment, send the email notification
-        sender_email = 'juanosebastian111@gmail.com'
-        receiver_email = patient_email
-        subject = 'Hospital Appointment'
-        body = f'Dear {patient},\n\nHope this email finds you well.\nThis is an autogenerated mail to confirm your upcoming appointment scheduled on {appointment_date}.\n\nAppointment Details:\nDate and Time: {appointment_date}\nDoctor: {doctor}\n\nThank you for choosing us. Look forward for the appointment.\n\nBest regards,\nHMS'
+    cur.execute("SELECT email FROM patients WHERE name=?", (d["patient"],))
+    email = cur.fetchone()[0]
 
-        try:
-            smtp_server = smtplib.SMTP('smtp.gmail.com', 587)
-            smtp_server.starttls()
-            smtp_server.login('juanosebastian111@gmail.com', 'nuxd zqgs mlhd kffp')  # Use your Gmail email and App Password
-            smtp_server.sendmail(sender_email, receiver_email, f'Subject: {subject}\n\n{body}')
-            smtp_server.quit()
-            return jsonify({'message': 'Appointment created successfully and email sent'})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    conn.commit()
+    conn.close()
 
-if __name__ == '__main__':
-    app.run(debug=True,host=config['host'],port=config['port'])
+    send_email(
+        email,
+        "Appointment Confirmed",
+        f"""
+Hello {d['patient']},
+
+Your appointment is confirmed.
+
+Doctor: {d['doctor']}
+Date: {d['date']}
+Time: {d['time']}
+
+Hospital Management System
+"""
+    )
+
+    return jsonify({"message":"Appointment booked"})
+# Add this after your other appointment routes
+
+# -------------------- HISTORY --------------------
+@app.route("/appointments")
+def history():
+    if not guard(): return jsonify([]),401
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+    cur.execute("SELECT id,patient,doctor,date,time,status FROM appointments ORDER BY id DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([
+        {"id":r[0],"patient":r[1],"doctor":r[2],"date":r[3],"time":r[4],"status":r[5]}
+        for r in rows
+    ])
+# -------------------- DELETE APPOINTMENT --------------------
+@app.route("/delete_appointment", methods=["POST"])
+def delete_appointment():
+    if not guard(): return jsonify({"error":"unauthorized"}),401
+
+    d = request.json
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+    
+    cur.execute("DELETE FROM appointments WHERE id=?", (d["id"],))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"message":"Appointment deleted successfully"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)

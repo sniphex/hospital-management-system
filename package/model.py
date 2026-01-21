@@ -1,9 +1,13 @@
 #Tushar Borole
 #Python 2.7
-
+import os
 import sqlite3
 import json
-with open('HMS\config.json') as data_file:
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_PATH = os.path.join(BASE_DIR, "HMS", "config.json")
+
+with open(CONFIG_PATH) as data_file:
+
     config = json.load(data_file)
 
 conn=sqlite3.connect(config['database'], check_same_thread=False)
