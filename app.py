@@ -129,41 +129,63 @@ def doctors():
 # -------------------- APPOINTMENT --------------------
 @app.route("/create_appointment", methods=["POST"])
 def create_appointment():
-    if not guard(): return jsonify({"error":"unauthorized"}),401
+    data = request.json
 
-    d = request.json
-    conn = sqlite3.connect(DB)
+    required = ["patient", "doctor", "date", "time"]
+    if not all(k in data and data[k] for k in required):
+        return jsonify({"error": "Missing appointment details"}), 400
+
+    conn = sqlite3.connect("hospital.db")
     cur = conn.cursor()
 
-    cur.execute(
-        "INSERT INTO appointments VALUES (NULL,?,?,?,?,?)",
-        (d["patient"],d["doctor"],d["date"],d["time"],"Booked")
-    )
+    # get patient email
+    cur.execute("SELECT email FROM patients WHERE name = ?", (data["patient"],))
+    row = cur.fetchone()
 
-    cur.execute("SELECT email FROM patients WHERE name=?", (d["patient"],))
-    email = cur.fetchone()[0]
+    if not row:
+        conn.close()
+        return jsonify({"error": "Patient not found"}), 404
+
+    patient_email = row[0]
+
+    # INSERT APPOINTMENT (THIS MUST ALWAYS WORK)
+    cur.execute("""
+        INSERT INTO appointments (patient, doctor, date, time, status)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        data["patient"],
+        data["doctor"],
+        data["date"],
+        data["time"],
+        "Booked"
+    ))
 
     conn.commit()
     conn.close()
 
-    send_email(
-        email,
-        "Appointment Confirmed",
-        f"""
-Hello {d['patient']},
+    # TRY EMAIL — NEVER CRASH
+    try:
+        send_email(
+            to=patient_email,
+            subject="Appointment Confirmation",
+            body=f"""
+Dear {data['patient']},
 
-Your appointment is confirmed.
+Your appointment has been booked successfully.
 
-Doctor: {d['doctor']}
-Date: {d['date']}
-Time: {d['time']}
+Doctor: {data['doctor']}
+Date: {data['date']}
+Time: {data['time']}
 
-Hospital Management System
-"""
-    )
+— Hospital Management System
+""",
+            user=EMAIL_USER,
+            password=EMAIL_PASS
+        )
+    except Exception as e:
+        print("EMAIL FAILED:", e)   # Render logs only
 
-    return jsonify({"message":"Appointment booked"})
-# Add this after your other appointment routes
+    return jsonify({"message": "Appointment booked successfully"})
 
 # -------------------- HISTORY --------------------
 @app.route("/appointments")
