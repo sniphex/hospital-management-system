@@ -1,99 +1,127 @@
 import os
 import sqlite3
+import firebase_admin
+from firebase_admin import auth, credentials, firestore
 from flask import Flask, request, jsonify, session, redirect
 from dotenv import load_dotenv
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
+# --------------------------------------------------
+# LOAD ENV
+# --------------------------------------------------
 load_dotenv()
-
-app = Flask(__name__, static_folder="static", static_url_path="")
-app.secret_key = os.getenv("SECRET_KEY", "hospital-management-secret-key-2024")
-
-DB = "hospital.db"
 
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 FROM_EMAIL = os.getenv("FROM_EMAIL")
+SECRET_KEY = os.getenv("SECRET_KEY", "hospital-management-secret-key")
 
+DB = "hospital.db"
+
+# --------------------------------------------------
+# FLASK APP
+# --------------------------------------------------
+app = Flask(__name__, static_folder="static", static_url_path="")
+app.secret_key = SECRET_KEY
+
+# --------------------------------------------------
+# FIREBASE INIT (SAFE, ONCE)
+# --------------------------------------------------
+if not firebase_admin._apps:
+    cred = credentials.Certificate("firebase-key.json")
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+# --------------------------------------------------
+# SQLITE INIT (APPOINTMENTS ONLY)
+# --------------------------------------------------
 def init_db():
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
-
-    cur.execute("""CREATE TABLE IF NOT EXISTS patients(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL
-    )""")
-
-    cur.execute("""CREATE TABLE IF NOT EXISTS doctors(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        specialization TEXT NOT NULL
-    )""")
-
-    cur.execute("""CREATE TABLE IF NOT EXISTS appointments(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient TEXT NOT NULL,
-        doctor TEXT NOT NULL,
-        date TEXT NOT NULL,
-        time TEXT NOT NULL,
-        status TEXT NOT NULL
-    )""")
-
-    cur.execute("SELECT COUNT(*) FROM doctors")
-    if cur.fetchone()[0] == 0:
-        doctors = [
-            ("Dr. Rajesh Kumar", "Cardiologist"),
-            ("Dr. Anita Rao", "Gynecologist"),
-            ("Dr. Sunil Mehta", "Orthopedic"),
-            ("Dr. Neha Sharma", "Dermatologist"),
-            ("Dr. Arjun Pillai", "Neurologist"),
-        ]
-        cur.executemany("INSERT INTO doctors (name, specialization) VALUES (?,?)", doctors)
-
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient TEXT NOT NULL,
+            doctor TEXT NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            status TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
 init_db()
 
-def send_notification_email(recipient, subject, content):
+# --------------------------------------------------
+# EMAIL (SENDGRID)
+# --------------------------------------------------
+def send_notification_email(to, subject, html):
     if not SENDGRID_API_KEY or not FROM_EMAIL:
-        return False
-    
+        print("⚠️ Email not configured")
+        return
+
     try:
         message = Mail(
             from_email=FROM_EMAIL,
-            to_emails=recipient,
+            to_emails=to,
             subject=subject,
-            html_content=content
+            html_content=html
         )
         sg = SendGridAPIClient(SENDGRID_API_KEY)
-        response = sg.send(message)
-        return response.status_code in [200, 202]
+        sg.send(message)
     except Exception as e:
-        print(f"Email notification error: {e}")
-        return False
+        print("❌ Email error:", e)
 
-def check_authentication():
-    return session.get("logged_in") == True
+# --------------------------------------------------
+# AUTH HELPERS
+# --------------------------------------------------
+def is_logged_in():
+    return session.get("logged_in") is True
 
+# --------------------------------------------------
+# ROUTES
+# --------------------------------------------------
 @app.route("/")
-def index():
+def login_page():
     return app.send_static_file("login.html")
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
-    email = data.get("email")
-    password = data.get("password")
-    
-    if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+    if data.get("email") == ADMIN_EMAIL and data.get("password") == ADMIN_PASSWORD:
         session["logged_in"] = True
         return jsonify({"success": True})
-    
     return jsonify({"success": False}), 401
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    data = request.json
+
+    email = data.get("email")
+    password = data.get("password")
+    role = data.get("role")
+
+    if not email or not password or not role:
+        return jsonify({"error": "Missing fields"}), 400
+
+    try:
+        user = auth.create_user(email=email, password=password)
+
+        db.collection("users").document(user.uid).set({
+            "email": email,
+            "role": role,
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        print("❌ SIGNUP ERROR:", e)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/logout")
 def logout():
@@ -102,163 +130,156 @@ def logout():
 
 @app.route("/home")
 def home():
-    if not check_authentication():
+    if not is_logged_in():
         return redirect("/")
     return app.send_static_file("index.html")
 
+# --------------------------------------------------
+# PATIENTS (FIREBASE)
+# --------------------------------------------------
 @app.route("/create_patient", methods=["POST"])
 def create_patient():
-    if not check_authentication():
-        return jsonify({"error": "Unauthorized access"}), 401
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
-    patient_name = data.get("name")
-    patient_email = data.get("email")
-    
-    if not patient_name or not patient_email:
-        return jsonify({"error": "Missing required fields"}), 400
-    
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
-    cur.execute("INSERT INTO patients (name, email) VALUES (?, ?)", 
-                (patient_name, patient_email))
-    conn.commit()
-    conn.close()
-    
+    name = data.get("name")
+    email = data.get("email")
+
+    if not name or not email:
+        return jsonify({"error": "Missing fields"}), 400
+
+    db.collection("patients").add({
+        "name": name,
+        "email": email,
+        "created_at": firestore.SERVER_TIMESTAMP
+    })
+
     return jsonify({"message": "Patient registered successfully"})
 
+# --------------------------------------------------
+# DOCTORS (FIREBASE) — FIXED UNDEFINED ISSUE
+# --------------------------------------------------
 @app.route("/doctor")
 def get_doctors():
-    if not check_authentication():
+    if not is_logged_in():
         return jsonify([]), 401
-    
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
-    cur.execute("SELECT name, specialization FROM doctors")
-    rows = cur.fetchall()
-    conn.close()
-    
-    doctors_list = []
-    for row in rows:
-        doctors_list.append({
-            "name": row[0],
-            "specialization": row[1]
-        })
-    
-    return jsonify(doctors_list)
 
+    doctors = []
+    docs = db.collection("doctors").stream()
+
+    for doc in docs:
+        d = doc.to_dict()
+
+        # 🔥 FIX: guarantee specialization always exists
+        doctors.append({
+            "name": d.get("name", "Unknown"),
+            "specialization": d.get("specialization", "General")
+        })
+
+    return jsonify(doctors)
+
+# --------------------------------------------------
+# CREATE APPOINTMENT
+# --------------------------------------------------
 @app.route("/create_appointment", methods=["POST"])
 def create_appointment():
-    print("DEBUG: create_appointment route HIT")
-    if not check_authentication():
-        return jsonify({"error": "Unauthorized access"}), 401
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
+    patient = data.get("patient")
+    doctor = data.get("doctor")
+    date = data.get("date")
+    time = data.get("time")
 
-    patient_name = data.get("patient")
-    doctor_name = data.get("doctor")
-    appointment_date = data.get("date")
-    appointment_time = data.get("time")
+    if not all([patient, doctor, date, time]):
+        return jsonify({"error": "Missing fields"}), 400
 
-    if not all([patient_name, doctor_name, appointment_date, appointment_time]):
-        return jsonify({"error": "All fields are required"}), 400
+    # 🔥 Get patient email from Firebase
+    patient_docs = db.collection("patients").where("name", "==", patient).stream()
+    patient_email = None
 
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
+    for doc in patient_docs:
+        patient_email = doc.to_dict().get("email")
+        break
 
-    # Fetch patient email
-    cur.execute("SELECT email FROM patients WHERE name = ?", (patient_name,))
-    row = cur.fetchone()
-
-    if not row:
-        conn.close()
+    if not patient_email:
         return jsonify({"error": "Patient not found"}), 404
 
-    patient_email = row[0]
-
-    # Insert appointment
+    # ✅ Save appointment (SQLite)
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
     cur.execute("""
         INSERT INTO appointments (patient, doctor, date, time, status)
         VALUES (?, ?, ?, ?, ?)
-    """, (
-        patient_name,
-        doctor_name,
-        appointment_date,
-        appointment_time,
-        "Booked"
-    ))
-
+    """, (patient, doctor, date, time, "Booked"))
     conn.commit()
     conn.close()
 
-    # Send email (DO NOT BLOCK BOOKING)
-    try:
-        send_notification_email(
-            patient_email,
-            "Appointment Confirmation",
-            f"""
-            <h3>Appointment Confirmed</h3>
-            <p>Patient: {patient_name}</p>
-            <p>Doctor: {doctor_name}</p>
-            <p>Date: {appointment_date}</p>
-            <p>Time: {appointment_time}</p>
-            """
-        )
-    except Exception as e:
-        print("Email failed but appointment saved:", e)
+    # 📧 Email
+    send_notification_email(
+        patient_email,
+        "Appointment Confirmation",
+        f"""
+        <h3>Appointment Confirmed</h3>
+        <p><b>Patient:</b> {patient}</p>
+        <p><b>Doctor:</b> {doctor}</p>
+        <p><b>Date:</b> {date}</p>
+        <p><b>Time:</b> {time}</p>
+        """
+    )
 
-    return jsonify({
-        "success": True,
-        "message": "Appointment booked successfully"
-    })
+    return jsonify({"message": "Appointment booked successfully"})
 
-
+# --------------------------------------------------
+# APPOINTMENT HISTORY
+# --------------------------------------------------
 @app.route("/appointments")
 def get_appointments():
-    if not check_authentication():
+    if not is_logged_in():
         return jsonify([]), 401
-    
+
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
     cur.execute("""
-        SELECT id, patient, doctor, date, time, status 
-        FROM appointments 
+        SELECT id, patient, doctor, date, time, status
+        FROM appointments
         ORDER BY id DESC
     """)
     rows = cur.fetchall()
     conn.close()
-    
-    appointments_list = []
-    for row in rows:
-        appointments_list.append({
-            "id": row[0],
-            "patient": row[1],
-            "doctor": row[2],
-            "date": row[3],
-            "time": row[4],
-            "status": row[5]
-        })
-    
-    return jsonify(appointments_list)
 
+    return jsonify([
+        {
+            "id": r[0],
+            "patient": r[1],
+            "doctor": r[2],
+            "date": r[3],
+            "time": r[4],
+            "status": r[5]
+        } for r in rows
+    ])
+
+# --------------------------------------------------
+# DELETE APPOINTMENT
+# --------------------------------------------------
 @app.route("/delete_appointment", methods=["POST"])
 def delete_appointment():
-    if not check_authentication():
-        return jsonify({"error": "Unauthorized access"}), 401
+    if not is_logged_in():
+        return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
-    appointment_id = data.get("id")
-    
-    if not appointment_id:
-        return jsonify({"error": "Appointment ID required"}), 400
-    
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
-    cur.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
+    cur.execute("DELETE FROM appointments WHERE id = ?", (data["id"],))
     conn.commit()
     conn.close()
-    
-    return jsonify({"message": "Appointment deleted successfully"})
 
+    return jsonify({"message": "Appointment deleted"})
+
+# --------------------------------------------------
+# RUN
+# --------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000, debug=True)

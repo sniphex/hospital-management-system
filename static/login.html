@@ -318,6 +318,23 @@ button.loading .spinner {
                 <span class="btn-text">Sign In</span>
                 <div class="spinner"></div>
             </button>
+            <hr style="margin:20px 0;">
+
+<h3>Create Account</h3>
+
+<input type="email" id="signupEmail" placeholder="Email">
+
+<input type="password" id="signupPassword" placeholder="Password">
+
+<select id="signupRole">
+  <option value="">Select Role</option>
+  <option value="admin">Admin</option>
+  <option value="doctor">Doctor</option>
+  <option value="receptionist">Receptionist</option>
+</select>
+
+<button onclick="signup()">Sign Up</button>
+
             
             <div class="error" id="error"></div>
         </form>
@@ -379,5 +396,63 @@ function login(e) {
     });
 }
 </script>
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAW3F6W4VRbjx9SWgqyCfBC0dDHTo2NMJk",
+    authDomain: "hospital-management-syst-9c8cf.firebaseapp.com",
+    projectId: "hospital-management-syst-9c8cf",
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+</script>
+<script>
+function signup() {
+  const email = document.getElementById("signupEmail").value;
+  const password = document.getElementById("signupPassword").value;
+  const role = document.getElementById("signupRole").value;
+
+  if (!email || !password || !role) {
+    alert("Please fill all signup fields");
+    return;
+  }
+
+  // 1️⃣ Create user in Firebase Auth
+  auth.createUserWithEmailAndPassword(email, password)
+    .then(userCredential => {
+      const uid = userCredential.user.uid;
+
+      // 2️⃣ Save role in backend (Firestore)
+      return fetch("/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          role: role
+        })
+      });
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        alert("Signup successful! Please login.");
+      } else {
+        alert("Signup failed");
+      }
+    })
+    .catch(error => {
+      alert(error.message);
+    });
+}
+</script>
+
 </body>
 </html>
