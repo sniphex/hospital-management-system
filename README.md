@@ -1,202 +1,197 @@
-🏥 Hospital Management System (HMS)
+<!-- Improved compatibility of back to top link -->
+<a id="readme-top"></a>
 
-A full-stack Hospital Management System built with Flask that enables secure patient registration, appointment booking, role-based authentication, email notifications, and appointment tracking through a clean, hospital-style dashboard.
+<br />
+<div align="center">
+  <h3 align="center">Hospital Management System</h3>
 
-🔗 Live Demo:
-👉 https://hospital-management-system.onrender.com
+  <p align="center">
+    A full-stack hospital workflow management system built with Flask, Firebase, and SQLite.
+    <br />
+    <br />
+    <a href="https://github.com/sniphex/hospital-management-system">View Repository</a>
+    ·
+    <a href="https://github.com/sniphex/hospital-management-system/issues">Report Bug</a>
+    ·
+    <a href="https://github.com/sniphex/hospital-management-system/issues">Request Feature</a>
+  </p>
+</div>
 
-📌 Overview
+---
 
-This project simulates a real hospital workflow, where an administrator can:
+## 📑 Table of Contents
+<details>
+  <summary>Expand</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contact">Contact</a></li>
+  </ol>
+</details>
 
-Register patients
+---
 
-Manage doctor availability
+## About The Project
 
-Book appointments
+The **Hospital Management System** is a backend-focused full-stack application designed to manage hospital workflows such as patient registration, doctor management, and appointment scheduling.
 
-Track appointment history
+The project focuses on **real-world backend concerns**:
+- authentication
+- session handling
+- database separation
+- cloud deployment
+- production debugging
 
-Send confirmation emails automatically
+This is not a demo UI project — it is an **engineering-driven system**.
 
-The system is designed to be practical, production-oriented, and deployment-ready.
+### Key Capabilities
+- Firebase Authentication for user accounts
+- Role-based access control
+- Patient and doctor management
+- Appointment booking and history
+- Email notifications via SendGrid
+- Cloud deployment on Render
 
-✨ Core Features
-🔐 Authentication
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Secure login using environment variables
+---
 
-Session-based authentication
+## Architecture
 
-Logout support
+The system follows a clean client-server architecture with clear separation of responsibilities.
+Browser (HTML / JS)
+|
+| HTTP Requests (JSON)
+v
+Flask Backend (Render)
+|
+|-- Firebase Authentication
+|-- Firestore (Users, Patients, Doctors)
+|-- SQLite (Appointments)
+|
+|-- SendGrid (Email Notifications)
 
-Protected routes
 
-👤 Patient Management
+### Design Rationale
+- **Firebase** handles authentication and scalable user data
+- **SQLite** stores transactional appointment records
+- **Flask** acts as the orchestration layer
+- **SendGrid** handles asynchronous email delivery
 
-Register patients with name & email
+This separation keeps the system maintainable and production-ready.
 
-Validates patient existence before booking
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Stores data securely in SQLite
+---
 
-🩺 Doctor Management
+## Built With
 
-Pre-seeded doctor database
+* **Backend**: Python, Flask  
+* **Authentication**: Firebase Authentication  
+* **Databases**: Firestore, SQLite  
+* **Email Service**: SendGrid  
+* **Deployment**: Render  
+* **Version Control**: Git, GitHub  
 
-Doctors listed with specializations
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Dynamic doctor selection during booking
+---
 
-📅 Appointment Booking
+## Getting Started
 
-Book appointments with:
+### Prerequisites
 
-Patient
+- Python 3.9+
+- Git
+- Firebase project with Admin SDK credentials
+- SendGrid API key
 
-Doctor
+### Installation
 
-Date (calendar picker)
+1. Clone the repository
+   ```sh
+   git clone https://github.com/sniphex/hospital-management-system.git
+2. Create and activate virtual environment
 
-Time
-
-Prevents incomplete bookings
-
-Appointment status tracking
-
-📜 Appointment History
-
-View all appointments in a structured table
-
-Search by patient or doctor name
-
-Filter by appointment status
-
-📧 Email Notifications
-
-Automatic confirmation email sent to patients
-
-SMTP-based integration
-
-Booking remains successful even if email fails (fail-safe)
-
-🎨 User Interface
-
-Clean, hospital-style admin dashboard
-
-Responsive layout
-
-Professional color scheme and spacing
-
-🛠 Technology Stack
-Layer	Technology
-Backend	Python, Flask
-Frontend	HTML, CSS, JavaScript
-Database	SQLite
-Authentication	Flask Sessions
-Email	SMTP (smtplib)
-Deployment	Render
-📂 Project Structure
-hospital-management-system/
-│
-├── app.py                  # Main Flask application
-├── database.py             # Database utilities
-├── init_db.py              # Database initialization
-├── seed_doctors.py         # Doctor seed data
-├── mailer.py               # Email service
-├── requirements.txt
-├── README.md
-│
-├── static/
-│   ├── login.html          # Login page
-│   ├── index.html          # Admin dashboard
-│   ├── patient.html
-│   ├── appointments.html
-│
-├── hospital.db             # SQLite database (ignored)
-├── .env                    # Environment variables (ignored)
-└── .gitignore
-
-⚙️ Local Setup
-1️⃣ Clone the Repository
-git clone https://github.com/<your-username>/hospital-management-system.git
-cd hospital-management-system
-
-2️⃣ Create Virtual Environment
 python -m venv venv
-source venv/bin/activate   # macOS/Linux
-venv\Scripts\activate      # Windows
+source venv/bin/activate
 
-3️⃣ Install Dependencies
+
+3. Install dependencies
+
 pip install -r requirements.txt
 
-4️⃣ Configure Environment Variables
 
-Create a .env file:
+4. Set environment variables (Render or local .env)
 
-ADMIN_EMAIL=admin@hms.local
-ADMIN_PASSWORD=admin123
-
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_app_password
+SECRET_KEY=your_secret_key
+SENDGRID_API_KEY=your_sendgrid_key
+FROM_EMAIL=your_email
+FIREBASE_CREDENTIALS=<firebase_json_string>
 
 
-⚠️ Use Gmail App Password, not your real email password.
+5. Run the app
 
-5️⃣ Initialize Database
-python init_db.py
-python seed_doctors.py
-
-6️⃣ Run the Application
 python app.py
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Access the app at:
+### Usage
 
-http://127.0.0.1:5000
+Admin can log in and manage doctors
 
-🔑 Default Credentials
-Role	Email	Password
-Administrator	admin@hms.local
-	admin123
-🚀 Deployment
+Receptionist can register patients
 
-The application is deployed on Render, using:
+Appointments can be booked and tracked
 
-Production-ready WSGI server
+Patients receive email confirmations
 
-Secure environment variables
+Appointment history is maintained securely
 
-Centralized logging
+This system mirrors real hospital front-desk workflows.
 
-🔮 Planned Enhancements
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Doctor login & dashboards
+## Roadmap
 
-Appointment status updates (Completed / Cancelled)
+ Firebase Authentication
+        ||
+ Appointment booking
+        ||
+ Email notifications
+        ||
+ Cloud deployment
+        ||
+ Improved role-based dashboards
+        ||
+ Audit logs
+        ||
+ Analytics and reporting
 
-Analytics & reports
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-PDF appointment summaries
-
-SMS notifications
-
-⭐ Why This Project Matters
-
-Models a real-world hospital workflow
-
-Demonstrates backend + frontend integration
-
-Includes authentication & sessions
-
-Implements email automation
-
-Fully deployed & production-ready
-
-This project goes beyond CRUD and reflects practical system design.
-
-👩‍💻 Author
+## Contact
 
 Abhirami Suresh
-Final-year Computer Science Engineering student
-Focused on Backend Development, Cloud Computing & Full-Stack Systems
+📧 Email: aamisuresh03@gmail.com
+🔗 LinkedIn: www.linkedin.com/in/abhirami-suresh-22b594250
+
+## Project Link:
+https://github.com/sniphex/hospital-management-system
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
