@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import firebase_admin
+import json
 from firebase_admin import auth, credentials, firestore
 from flask import Flask, request, jsonify, session, redirect
 from dotenv import load_dotenv
@@ -29,11 +30,17 @@ app.secret_key = SECRET_KEY
 # --------------------------------------------------
 # FIREBASE INIT (SAFE, ONCE)
 # --------------------------------------------------
+# FIREBASE INIT (SAFE, ONCE) — RENDER SAFE
 if not firebase_admin._apps:
-    cred = credentials.Certificate("firebase-key.json")
+    firebase_json = os.getenv("FIREBASE_CREDENTIALS")
+    if not firebase_json:
+        raise RuntimeError("FIREBASE_CREDENTIALS not set")
+
+    cred = credentials.Certificate(json.loads(firebase_json))
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
+
 
 # --------------------------------------------------
 # SQLITE INIT (APPOINTMENTS ONLY)
@@ -92,10 +99,36 @@ def login_page():
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
-    if data.get("email") == ADMIN_EMAIL and data.get("password") == ADMIN_PASSWORD:
+    email = data.get("email")
+    password = data.get("password")
+
+    # ✅ Admin login (hardcoded)
+    if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
         session["logged_in"] = True
-        return jsonify({"success": True})
-    return jsonify({"success": False}), 401
+        session["role"] = "admin"
+        session["email"] = email
+        return jsonify({"success": True, "role": "admin"})
+
+    # ✅ Firebase user login (email existence + role check)
+    try:
+        user = auth.get_user_by_email(email)
+
+        user_doc = db.collection("users").document(user.uid).get()
+        if not user_doc.exists:
+            return jsonify({"error": "User role not found"}), 403
+
+        role = user_doc.to_dict().get("role")
+
+        session["logged_in"] = True
+        session["email"] = email
+        session["role"] = role
+
+        return jsonify({"success": True, "role": role})
+
+    except Exception as e:
+        print("LOGIN ERROR:", e)
+        return jsonify({"error": "Invalid credentials"}), 401
+
 
 @app.route("/signup", methods=["POST"])
 def signup():
