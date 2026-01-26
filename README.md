@@ -3,7 +3,7 @@
 
 <br />
 <div align="center">
-  <h3 align="center">Hospital Management System</h3>
+  <h3 align="center">HOSPITAL DATABASE MANAGEMENT SYSTEM</h3>
 
   <p align="center">
     A full-stack hospital workflow management system built with Flask, Firebase, and SQLite.
